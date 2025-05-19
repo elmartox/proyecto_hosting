@@ -31,6 +31,10 @@ crear_usuario_sistema() {
     sudo useradd -d "$USER_DIR" -s /bin/bash "$USER_NAME"
     echo "${USER_NAME}:${PASS}" | sudo chpasswd
     sudo mkdir -p "$PUBLIC_HTML"
+    # Configurar permisos y ownership para FTP 
+    sudo chown -R "${FTP_USER}:${FTP_USER}" "$WEB_ROOT"
+    sudo chmod 755 "$WEB_ROOT"
+    sudo chmod 755 "$PUBLIC_HTML"
 }
 
 crear_archivos_html() {

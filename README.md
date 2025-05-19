@@ -49,7 +49,63 @@ ajustar_permisos_y_enjaular() {
 
   if ! grep -q "^DenyUsers.*\b$USER_NAME\b" /etc/ssh/sshd_config; then
     echo "DenyUsers $USER_NAME" | sudo tee -a /etc/ssh/sshd_config > /dev/null
-    sudo systemctl restart ssh
+    sudo systemctl restart ssh 
+    #Prohíbe el acceso SSH al usuario agregándolo a la directiva DenyUsers en la configuración SSH y reinicia el servicio para aplicar los cambios.
   fi 
+  crear_bd_y_usuario_mariadb() {
+  sudo mariadb -e "CREATE DATABASE ${USER_NAME};"
+  sudo mariadb -e "CREATE USER '${USER_NAME}'@'localhost' IDENTIFIED BY '${PASS}';"
+  
+  #Se le conceden todos los privilegios (crear tablas, insertar datos, etc.) pero únicamente sobre su propia base de datos. El .* indica todas las tablas dentro de esa base, no otras bases de datos.
+  sudo mariadb -e "GRANT ALL PRIVILEGES ON ${USER_NAME}.* TO '${USER_NAME}'@'localhost';" 
 
+  sudo mariadb -e "FLUSH PRIVILEGES;"
+
+}
+# Define una variable local con la ruta donde se va a crear el archivo de configuración de NGINX para el dominio del usuario
+Crear_config_nginx() {
+  local NGINX_CONF="/etc/nginx/sites-available/${DOMAIN}"
+  sudo tee "$NGINX_CONF" > /dev/null <<EOF
+  # Usa tee con sudo para crear y escribir en el archivo de configuración como superusuario.
+🔹 > /dev/null oculta la salida en pantalla.
+🔹 <<EOF indica que lo que sigue es un bloque de texto que se insertará en el archivo.
+
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    root ${PUBLIC_HTML};
+    index index.php index.html;
+
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
+
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php8.1-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+EOF
+# Crea un enlace simbólico en sites-enabled para activar el sitio en NGINX.
+🔹 La opción -sf fuerza el enlace y sobreescribe si ya existe.
+  sudo ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
+}
+#  Verifica si el dominio ya está en /etc/hosts, esto solo tiene efecto local, útil si estás probando sin un DNS público.
+actualizar_hosts() {
+  if ! grep -q "${DOMAIN}" /etc/hosts; then
+    echo "127.0.0.1 ${DOMAIN}" | sudo tee -a /etc/hosts > /dev/null
+  fi
+}
+
+recargar_nginx() {
+  sudo systemctl reload nginx
+}
+# Recarga NGINX para aplicar los cambios
 }
